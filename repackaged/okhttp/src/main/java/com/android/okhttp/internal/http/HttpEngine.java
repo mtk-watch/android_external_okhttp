@@ -35,6 +35,7 @@ import com.android.okhttp.internal.Internal;
 import com.android.okhttp.internal.InternalCache;
 import com.android.okhttp.internal.Util;
 import com.android.okhttp.internal.Version;
+import com.android.okhttp.internal.cta.CtaAdapter;
 import java.io.IOException;
 import java.net.CookieHandler;
 import java.net.ProtocolException;
@@ -169,6 +170,8 @@ public final class HttpEngine {
   private CacheRequest storeRequest;
   private CacheStrategy cacheStrategy;
 
+  private boolean momsPermitted = true;
+
   /**
    * @param request the HTTP request without a body. The body must be written via the engine's
    *     request body stream.
@@ -229,6 +232,16 @@ public final class HttpEngine {
     }
 
     if (networkRequest != null) {
+      /**
+      * M: Support MoM MMS checking.
+      */
+      synchronized (HttpEngine.class) {
+        if (!CtaAdapter.isSendingPermitted(userRequest)) {
+          momsPermitted = false;
+          return;
+        }
+      }
+
       httpStream = connect();
       httpStream.setHttpEngine(this);
 
@@ -581,6 +594,11 @@ public final class HttpEngine {
 
     Response networkResponse;
 
+    if (!momsPermitted) {
+      userResponse = CtaAdapter.getBadHttpResponse(userRequest);
+      return;
+    }
+
     if (forWebSocket) {
       httpStream.writeRequestHeaders(networkRequest);
       networkResponse = readNetworkResponse();
@@ -603,6 +621,7 @@ public final class HttpEngine {
               .header("Content-Length", Long.toString(contentLength))
               .build();
         }
+        System.out.println("[OkHttp] sendRequest>>");
         httpStream.writeRequestHeaders(networkRequest);
       }
 
@@ -618,6 +637,7 @@ public final class HttpEngine {
           httpStream.writeRequestBody((RetryableSink) requestBodyOut);
         }
       }
+      System.out.println("[OkHttp] sendRequest<<");
 
       networkResponse = readNetworkResponse();
     }
